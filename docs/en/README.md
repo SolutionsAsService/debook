@@ -1,6 +1,5 @@
 # Slot Booking System
 
-Project documentation is maintained in English.
 
 - [System Design](system-design.md)
 
