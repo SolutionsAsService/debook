@@ -1,6 +1,66 @@
 # Структура базы данных
 
-Источник схемы — [`migrations/001_initial.sql`](../../migrations/001_initial.sql). PostgreSQL является источником истины для слотов, бронирований, идемпотентности, шагов Saga и outbox-событий. Все даты и время хранятся в UTC.
+## Роли хранилищ
+
+Проект разделяет транзакционные операции, быстрый кэш, события и внешние подтверждения.
+
+- **PostgreSQL** — источник истины: слоты, бронирования, идемпотентность, шаги Saga и outbox. Только он принимает конкурентные решения о резервировании.
+- **Redis** — быстрый временный кэш и вспомогательное состояние сессий/лимитов. Потеря Redis не должна менять факт бронирования.
+- **ClickHouse** — аналитическое хранилище журнала событий, истории, отчётов и агрегатов. Данные приходят асинхронно через outbox → Kafka → `analytics-consumer`; ClickHouse не участвует в HTTP-транзакции бронирования.
+- **Blockchain** — внешнее доказательство и публикация подтверждений бронирований. Состояние отправки и хэши транзакций сначала фиксируются в PostgreSQL; блокчейн не заменяет его.
+
+ClickHouse использует таблицы `event_log` (полный неизменяемый JSON-событий) и `booking_facts` (разобранные поля для отчётов). SQL-структура находится в [`migrations/clickhouse/001_analytics.sql`](../../migrations/clickhouse/001_analytics.sql).
+
+### Интерфейсы и подключения
+
+После `docker compose up -d --build` доступны:
+
+- [Tabix](http://localhost:8082) — веб-интерфейс для SQL-запросов;
+- [ClickHouse HTTP](http://localhost:8123) — HTTP API;
+- native protocol — `localhost:9000`.
+
+Для Tabix укажите host `clickhouse`, port `8123`, database `debook`, user `debook`, password `debook_local`. Из контейнера запрос можно выполнить так:
+
+```bash
+docker compose exec clickhouse clickhouse-client --user debook --password debook_local --query 'SHOW TABLES'
+```
+
+### Применение ClickHouse-миграций
+
+После запуска ClickHouse примените SQL-файлы из `migrations/clickhouse/` по порядку:
+
+```bash
+for migration in migrations/clickhouse/*.sql; do
+  docker compose exec -T clickhouse clickhouse-client \
+    --user debook --password debook_local --multiquery < "$migration"
+done
+```
+
+Миграции должны быть безопасны для повторного запуска. Чтобы применить или проверить одну миграцию:
+
+```bash
+docker compose exec -T clickhouse clickhouse-client \
+  --user debook --password debook_local --multiquery < migrations/clickhouse/001_analytics.sql
+docker compose exec clickhouse clickhouse-client \
+  --user debook --password debook_local --query 'SHOW TABLES'
+```
+
+Compose монтирует эти SQL-файлы в каталог инициализации образа ClickHouse: новые файлы автоматически выполняются только при первом создании пустого хранилища. Для уже созданного volume используйте команды выше; при добавлении новых миграций применяйте их вручную таким же способом.
+
+## Запуск миграций
+
+После запуска контейнера PostgreSQL примените все SQL-миграции из каталога `migrations/`:
+
+```bash
+docker compose exec -T postgres sh -c \
+  'for migration in /migrations/*.sql; do
+     psql -U debook -d debook -v ON_ERROR_STOP=1 -f "$migration";
+   done'
+```
+
+Команда при каждом запуске повторно выполняет все SQL-файлы из `migrations/` в порядке имён. Поэтому новые изменения схемы добавляйте отдельными версионными миграциями, не изменяйте уже применённые файлы и делайте миграции безопасными для повторного выполнения (например, используйте `IF NOT EXISTS`).
+
+PostgreSQL является источником истины для слотов, бронирований, идемпотентности, шагов Saga и outbox-событий. Все даты и время хранятся в UTC.
 
 ## `slots` — временные слоты
 

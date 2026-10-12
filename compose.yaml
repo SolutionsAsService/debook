@@ -29,6 +29,8 @@ services:
       AUTHEO_CONFIRMATIONS: ${AUTHEO_CONFIRMATIONS:-2}
       AUTHEO_TX_TIMEOUT: ${AUTHEO_TX_TIMEOUT:-2m}
       AUTHEO_MAX_RETRIES: ${AUTHEO_MAX_RETRIES:-5}
+      BLOCKCHAIN_BATCH_SIZE: ${BLOCKCHAIN_BATCH_SIZE:-1000}
+      BLOCKCHAIN_BATCH_INTERVAL: ${BLOCKCHAIN_BATCH_INTERVAL:-5s}
       AUTHEO_COSMOS_RPC_URL: ${AUTHEO_COSMOS_RPC_URL:-https://cosmos-rpc.testnet.autheo.com}
       AUTHEO_REST_URL: ${AUTHEO_REST_URL:-https://rest.testnet.autheo.com}
       AUTHEO_FAUCET_URL: ${AUTHEO_FAUCET_URL:-https://faucet.testnet.autheo.com}
@@ -38,6 +40,21 @@ services:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  analytics-consumer:
+    build: .
+    entrypoint: ["analytics-consumer"]
+    environment:
+      KAFKA_BROKERS: kafka:19092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: debook
+      CLICKHOUSE_PASSWORD: debook_local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     restart: unless-stopped
 
@@ -129,11 +146,21 @@ services:
       - "127.0.0.1:9000:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+      - ./migrations/clickhouse:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "clickhouse-client", "--user", "debook", "--password", "debook_local", "--query", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 20
+    restart: unless-stopped
+
+  clickhouse-ui:
+    image: spoonest/clickhouse-tabix-web-client:latest
+    ports:
+      - "127.0.0.1:8082:80"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     restart: unless-stopped
 
   swagger-ui:

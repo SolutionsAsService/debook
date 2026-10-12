@@ -61,6 +61,11 @@ function App() {
   const addEvent = (method, title, detail, status = 'ok') => {
     if (!isRussian) {
       Object.entries(english).forEach(([ru, en]) => { title = title.replaceAll(ru, en); detail = detail.replaceAll(ru, en) })
+      title = title.replace(/^Получено (\d+) свободных слотов$/, 'Fetched $1 available slots')
+      title = title.replace(/^Сессия #(\d+): слоты не найдены$/, 'Session #$1: no slots found')
+      title = title.replace(/^Сессия #(\d+): ошибка$/, 'Session #$1: error')
+      title = title.replaceAll('свободных слотов', 'available slots').replaceAll('слоты', 'slots').replaceAll('слот', 'slot')
+      detail = detail.replaceAll('слотов', 'slots').replaceAll('слот', 'slot')
     }
     const now = new Date()
     const stamp = now.toLocaleTimeString('ru-RU', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0')

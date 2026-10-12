@@ -12,12 +12,15 @@ contract BookingProof {
     mapping(bytes32 => uint256) public proofIdByBooking;
     mapping(uint256 => bytes32) public bookingHashByProof;
     mapping(uint256 => address) public ownerOfProof;
+    mapping(bytes32 => bytes32) public batchRoot;
 
     error Unauthorized();
     error ZeroAddress();
     error EmptyBookingHash();
     error BookingAlreadyProven(uint256 proofId);
     error UnknownProof();
+    error EmptyBatch();
+    error BatchAlreadyCommitted();
 
     event MinterUpdated(address indexed account, bool enabled);
     event BookingProofCreated(
@@ -25,6 +28,7 @@ contract BookingProof {
         bytes32 indexed bookingHash,
         address indexed owner
     );
+    event BatchCommitted(bytes32 indexed batchId, bytes32 indexed merkleRoot, uint256 leafCount);
 
     modifier onlyAdmin() {
         _onlyAdmin();
@@ -55,6 +59,26 @@ contract BookingProof {
         if (account == address(0)) revert ZeroAddress();
         minters[account] = enabled;
         emit MinterUpdated(account, enabled);
+    }
+
+    /// @notice Anchors a batch of off-chain booking leaves with one Merkle root.
+    function commitBatch(bytes32 batchId, bytes32 merkleRoot, uint256 leafCount) external onlyMinter {
+        if (batchId == bytes32(0) || merkleRoot == bytes32(0) || leafCount == 0) revert EmptyBatch();
+        if (batchRoot[batchId] != bytes32(0)) revert BatchAlreadyCommitted();
+        batchRoot[batchId] = merkleRoot;
+        emit BatchCommitted(batchId, merkleRoot, leafCount);
+    }
+
+    /// @notice Verifies a leaf against a previously committed batch root.
+    function verifyBatchLeaf(bytes32 batchId, bytes32 leaf, bytes32[] calldata proof) external view returns (bool) {
+        bytes32 computed = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 sibling = proof[i];
+            computed = computed < sibling
+                ? keccak256(abi.encodePacked(computed, sibling))
+                : keccak256(abi.encodePacked(sibling, computed));
+        }
+        return batchRoot[batchId] != bytes32(0) && batchRoot[batchId] == computed;
     }
 
     /// @notice Creates one proof for a booking and assigns it to a wallet.

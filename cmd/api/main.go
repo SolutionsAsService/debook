@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -128,9 +129,28 @@ func main() {
 			booking.HTTPError(w, http.StatusBadRequest, errors.New("wallet_address must be a valid EVM address"))
 			return
 		}
-		var claim, status, txHash string
-		if err := db.QueryRow(r.Context(), `SELECT claim_hash,status,COALESCE(tx_hash,'') FROM blockchain_proofs WHERE booking_id=$1`, id).Scan(&claim, &status, &txHash); err != nil {
+		var claim, status, txHash, leafHash, root string
+		var batchID uuid.NullUUID
+		var path []string
+		err := db.QueryRow(r.Context(), `SELECT p.claim_hash,p.status,COALESCE(p.tx_hash,''),p.batch_id::text,COALESCE(p.leaf_hash,''),COALESCE(b.merkle_root,''),COALESCE(p.merkle_path,'[]'::jsonb) FROM blockchain_proofs p LEFT JOIN blockchain_batches b ON b.id=p.batch_id WHERE p.booking_id=$1`, id).Scan(&claim, &status, &txHash, &batchID, &leafHash, &root, &path)
+		if err != nil {
 			booking.HTTPError(w, http.StatusNotFound, errors.New("blockchain proof not found"))
+			return
+		}
+		if batchID.Valid {
+			ok, err := verifyMerkleProof(leafHash, path, root)
+			if err != nil {
+				booking.HTTPError(w, http.StatusInternalServerError, err)
+				return
+			}
+			var claimHash [32]byte
+			if _, err := hex.Decode(claimHash[:], []byte(strings.TrimPrefix(claim, "0x"))); err != nil {
+				booking.HTTPError(w, 500, errors.New("invalid stored claim hash"))
+				return
+			}
+			leaf := crypto.Keccak256Hash(append(append([]byte{}, claimHash[:]...), common.HexToAddress(wallet).Bytes()...)).Hex()
+			ok = ok && strings.EqualFold(leaf, leafHash)
+			json.NewEncoder(w).Encode(map[string]any{"booking_id": id, "wallet_address": wallet, "owned": ok, "proof_status": status, "tx_hash": txHash, "batch_id": batchID.UUID.String(), "merkle_root": root, "leaf_hash": leafHash, "merkle_proof": path})
 			return
 		}
 		var hash [32]byte
@@ -184,6 +204,38 @@ func main() {
 	_ = server.Shutdown(shutdown)
 }
 
+func verifyMerkleProof(leafHash string, proof []string, root string) (bool, error) {
+	decode := func(s string) ([32]byte, error) {
+		var out [32]byte
+		b, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
+		if err != nil || len(b) != 32 {
+			return out, errors.New("invalid merkle hash")
+		}
+		copy(out[:], b)
+		return out, nil
+	}
+	current, err := decode(leafHash)
+	if err != nil {
+		return false, err
+	}
+	for _, siblingHex := range proof {
+		sibling, err := decode(siblingHex)
+		if err != nil {
+			return false, err
+		}
+		a, b := current, sibling
+		if string(a[:]) > string(b[:]) {
+			a, b = b, a
+		}
+		current = [32]byte(crypto.Keccak256Hash(append(append([]byte{}, a[:]...), b[:]...)))
+	}
+	want, err := decode(root)
+	if err != nil {
+		return false, err
+	}
+	return current == want, nil
+}
+
 type apiMetrics struct {
 	requests uint64
 	errors   uint64
@@ -191,6 +243,12 @@ type apiMetrics struct {
 
 func requestLog(l *slog.Logger, m *apiMetrics, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prometheus scrape traffic is instrumentation, not application traffic.
+		// Keep it out of request counters, error counters, and access logs.
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		atomic.AddUint64(&m.requests, 1)
 		id := r.Header.Get("X-Request-ID")
 		if id == "" {
