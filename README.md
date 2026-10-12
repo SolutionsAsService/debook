@@ -4,16 +4,20 @@ Debook is a high-throughput decentralized booking service for discovering and re
 Built with Go, it uses PostgreSQL, Redis, Kafka, and an asynchronous outbox workflow to process bookings and record proof of ownership on the Autheo blockchain. 
 The project includes a React-based load-testing interface and an observability stack with Prometheus metrics, OpenTelemetry tracing, and Jaeger.
 Base on main functions:
+
 - Get available time slots
 - Book a slot
 - Check the slot's owner
+
 This service could be used by businesses that let customers book limited, time-based slots:
+
 - Healthcare: appointments, diagnostic tests, and procedures.
 - Hospitality and rentals: hotel rooms, meeting rooms, equipment, and vehicles.
 - Transport and logistics: delivery windows, loading bays, and EV charging slots.
 - Events and entertainment: timed tickets, tours, venues, and activities.
 - Professional services: consultations, specialist appointments, and coworking spaces.
 - High-demand platforms: handling traffic spikes when bookings or ticket sales open.
+- 
 High throughput, metrics, and tracing help teams identify bottlenecks and monitor reliability. Blockchain proofs can provide verifiable evidence of booking ownership or history.
 
 ## Local API skeleton
