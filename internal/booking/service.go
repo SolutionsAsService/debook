@@ -77,9 +77,9 @@ func (s *Service) Create(ctx context.Context, key string, req CreateRequest) (Bo
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return Booking{}, 500, err
 	}
-	var status string
+	var status, regionID, resourceID string
 	var expires *time.Time
-	if err = tx.QueryRow(ctx, `SELECT status, CASE WHEN ends_at > now() THEN ends_at ELSE now() END FROM slots WHERE id=$1 FOR UPDATE`, req.SlotID).Scan(&status, &expires); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT status, region_id, resource_id, CASE WHEN ends_at > now() THEN ends_at ELSE now() END FROM slots WHERE id=$1 FOR UPDATE`, req.SlotID).Scan(&status, &regionID, &resourceID, &expires); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Booking{}, 404, errors.New("slot not found")
 		}
@@ -97,7 +97,7 @@ func (s *Service) Create(ctx context.Context, key string, req CreateRequest) (Bo
 	if _, err = tx.Exec(ctx, `INSERT INTO bookings(id,slot_id,tenant_id,customer_ref,wallet_address,status,idempotency_key,request_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, req.SlotID, tenant, req.CustomerRef, req.WalletAddress, b.Status, key, hash, expires); err != nil {
 		return Booking{}, 500, err
 	}
-	event, _ := json.Marshal(map[string]any{"booking_id": id.String(), "slot_id": req.SlotID, "status": b.Status, "wallet_address": req.WalletAddress})
+	event, _ := json.Marshal(map[string]any{"booking_id": id.String(), "slot_id": req.SlotID, "status": b.Status, "wallet_address": req.WalletAddress, "tenant_id": tenant, "customer_ref": req.CustomerRef, "region_id": regionID, "resource_id": resourceID, "expires_at": expires})
 	if _, err = tx.Exec(ctx, `INSERT INTO outbox_events(id,aggregate_id,type,payload) VALUES($1,$2,'BookingReserved',$3)`, uuid.New(), id, event); err != nil {
 		return Booking{}, 500, err
 	}
@@ -128,6 +128,9 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE slots SET status='AVAILABLE',version=version+1,updated_at=now() WHERE id=$1`, slot); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO outbox_events(id,aggregate_id,type,payload) SELECT $1,id,'BookingCancelled',jsonb_build_object('booking_id',id::text,'slot_id',slot_id::text,'status','CANCELLED','tenant_id',tenant_id,'customer_ref',customer_ref,'wallet_address',COALESCE(wallet_address,'')) FROM bookings WHERE id=$2`, uuid.New(), id); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

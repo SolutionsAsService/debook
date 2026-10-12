@@ -1,6 +1,66 @@
 # Database structure
 
-The schema source is [`migrations/001_initial.sql`](../../migrations/001_initial.sql). PostgreSQL is the source of truth for slots, bookings, idempotency, Saga steps, and outbox events. All timestamps are stored in UTC.
+## Storage roles
+
+The project separates transactional operations, fast cache, events, and external proofs.
+
+- **PostgreSQL** is the source of truth for slots, bookings, idempotency, Saga steps, and the outbox. Only PostgreSQL makes concurrent reservation decisions.
+- **Redis** is a fast, temporary cache and auxiliary store for sessions or limits. Losing Redis must not change whether a booking exists.
+- **ClickHouse** is the analytical store for the event log, history, reports, and aggregates. Data arrives asynchronously through outbox → Kafka → `analytics-consumer`; ClickHouse is outside the booking HTTP transaction.
+- **Blockchain** provides external publication and proof of booking confirmations. Submission state and transaction hashes are first recorded in PostgreSQL; the blockchain does not replace it.
+
+ClickHouse contains `event_log` (the complete immutable JSON event stream) and `booking_facts` (flattened booking fields for reports). The SQL schema is in [`migrations/clickhouse/001_analytics.sql`](../../migrations/clickhouse/001_analytics.sql).
+
+### Interfaces and connections
+
+After `docker compose up -d --build`, these endpoints are available:
+
+- [Tabix](http://localhost:8082) — web SQL interface;
+- [ClickHouse HTTP](http://localhost:8123) — HTTP API;
+- native protocol — `localhost:9000`.
+
+In Tabix, use host `clickhouse`, port `8123`, database `debook`, user `debook`, and password `debook_local`. From the container, run:
+
+```bash
+docker compose exec clickhouse clickhouse-client --user debook --password debook_local --query 'SHOW TABLES'
+```
+
+### Applying ClickHouse migrations
+
+After ClickHouse starts, apply SQL files from `migrations/clickhouse/` in order:
+
+```bash
+for migration in migrations/clickhouse/*.sql; do
+  docker compose exec -T clickhouse clickhouse-client \
+    --user debook --password debook_local --multiquery < "$migration"
+done
+```
+
+Migrations should be safe to run repeatedly. To apply or verify a single migration:
+
+```bash
+docker compose exec -T clickhouse clickhouse-client \
+  --user debook --password debook_local --multiquery < migrations/clickhouse/001_analytics.sql
+docker compose exec clickhouse clickhouse-client \
+  --user debook --password debook_local --query 'SHOW TABLES'
+```
+
+Compose mounts these SQL files into ClickHouse's image initialization directory. The image runs them automatically only when initializing an empty data volume. For an existing volume, use the commands above; apply any later migration files manually in the same way.
+
+## Running migrations
+
+After starting the PostgreSQL container, apply all SQL migrations from the `migrations/` directory:
+
+```bash
+docker compose exec -T postgres sh -c \
+  'for migration in /migrations/*.sql; do
+     psql -U debook -d debook -v ON_ERROR_STOP=1 -f "$migration";
+   done'
+```
+
+Each run executes all SQL files from `migrations/` again in filename order. Add schema changes as separate versioned migrations, do not modify files that have already been applied, and make migrations safe to run repeatedly (for example, by using `IF NOT EXISTS`).
+
+PostgreSQL is the source of truth for slots, bookings, idempotency, Saga steps, and outbox events. All timestamps are stored in UTC.
 
 ## `slots` — time slots
 

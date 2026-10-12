@@ -193,6 +193,12 @@ components:
         owned: { type: boolean }
         proof_status: { type: string, enum: [PENDING, SUBMITTED, CONFIRMED, FAILED] }
         tx_hash: { type: string }
+        batch_id: { type: string, format: uuid }
+        merkle_root: { type: string }
+        leaf_hash: { type: string }
+        merkle_proof:
+          type: array
+          items: { type: string }
     Slot:
       type: object
       required: [id, region_id, resource_id, starts_at, ends_at, status]

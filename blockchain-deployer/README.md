@@ -24,6 +24,7 @@ Get test THEO from the [Autheo Testnet faucet](https://faucet.testnet.autheo.com
 ## Compile
 
 ```bash
+cd blockchain-deployer
 docker compose run --rm foundry build
 ```
 

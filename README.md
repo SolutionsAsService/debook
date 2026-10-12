@@ -1,6 +1,20 @@
 # Decentralized Booking Service
 
-Initial implementation of a slot-booking service.
+Debook is a high-throughput decentralized booking service for discovering and reserving time slots. 
+Built with Go, it uses PostgreSQL, Redis, Kafka, and an asynchronous outbox workflow to process bookings and record proof of ownership on the Autheo blockchain. 
+The project includes a React-based load-testing interface and an observability stack with Prometheus metrics, OpenTelemetry tracing, and Jaeger.
+Base on main functions:
+- Get available time slots
+- Book a slot
+- Check the slot's owner
+This service could be used by businesses that let customers book limited, time-based slots:
+- Healthcare: appointments, diagnostic tests, and procedures.
+- Hospitality and rentals: hotel rooms, meeting rooms, equipment, and vehicles.
+- Transport and logistics: delivery windows, loading bays, and EV charging slots.
+- Events and entertainment: timed tickets, tours, venues, and activities.
+- Professional services: consultations, specialist appointments, and coworking spaces.
+- High-demand platforms: handling traffic spikes when bookings or ticket sales open.
+High throughput, metrics, and tracing help teams identify bottlenecks and monitor reliability. Blockchain proofs can provide verifiable evidence of booking ownership or history.
 
 ## Local API skeleton
 
@@ -9,8 +23,6 @@ go run ./cmd/api
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
 ```
-
-The first three implementation steps are documented in `docs/adr/0001-domain-boundaries.md`, `cmd/api`, and `migrations/001_initial.sql`.
 
 ## Local Docker environment
 
@@ -26,6 +38,7 @@ curl http://localhost:8080/readyz
 | Component | Host address | Address inside Compose |
 |---|---|---|
 | API | http://localhost:8080 | api:8080 |
+| React Load Lab (English) | http://localhost:5173/ | — (Vite dev server) |
 | PostgreSQL | localhost:5432 | postgres:5432 |
 | Redis | localhost:6379 | redis:6379 |
 | Kafka | localhost:9092 | kafka:19092 |

@@ -22,7 +22,7 @@ AUTHEO_MAX_RETRIES=5
 
 `AUTHEO_PRIVATE_KEY` следует получить для отдельного тестового кошелька и хранить только локально в `.env`; не добавлять его в Git и не использовать ключ от Mainnet в разработке. Для Compose ключ передаётся только сервису workflow, а API получает RPC и адрес контракта для read-only проверки владения.
 
-После создания брони workflow записывает proof в контракт. Проверить владение можно запросом `GET /api/v1/bookings/{booking_id}/ownership?wallet_address=0x...`; API вызывает `isBookingOwned` в Autheo и возвращает `owned`, статус proof и transaction hash.
+После создания брони workflow накапливает proof в Merkle batch. Batch отправляется при достижении `BLOCKCHAIN_BATCH_SIZE` (по умолчанию 1000) или по таймауту `BLOCKCHAIN_BATCH_INTERVAL` (по умолчанию 5 секунд), поэтому неполный batch также фиксируется. В Autheo записываются batch ID, Merkle root и число записей одной транзакцией; proof и Merkle path хранятся в PostgreSQL. Проверка выполняется запросом `GET /api/v1/bookings/{booking_id}/ownership?wallet_address=0x...`; ответ содержит batch ID, root, path и transaction hash.
 
-Контракт proof: [`blockchain-deployer/src/BookingProof.sol`](../../blockchain-deployer/src/BookingProof.sol). Он поддерживает создание proof авторизованным backend minter и read-only проверку принадлежности по `bookingHash` и wallet address.
+Контракт proof: [`blockchain-deployer/src/BookingProof.sol`](../../blockchain-deployer/src/BookingProof.sol). Он поддерживает `commitBatch` и проверку leaf через `verifyBatchLeaf`. После обновления контракта нужно задеплоить новую версию и задать её адрес в `AUTHEO_CONTRACT_ADDRESS`; существующий контракт не имеет batch-методов.
 Развернутый контракт Autheo Testnet: `0xb692755BAB064d32efB10F6853039861A3225e43`. Transaction hash: `0xd2651e84888101fb376acfe855075cf08cf6880e0e8850958555faca83ed1d56`. Адрес сохранён в локальном `.env` как `AUTHEO_CONTRACT_ADDRESS`.
