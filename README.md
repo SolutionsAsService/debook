@@ -48,6 +48,7 @@ curl http://localhost:8080/readyz
 | Redis | localhost:6379 | redis:6379 |
 | Kafka | localhost:9092 | kafka:19092 |
 | ClickHouse HTTP / native | localhost:8123 / 9000 | clickhouse:8123 / 9000 |
+| Tabix (ClickHouse UI) | http://localhost:8082 | clickhouse-ui:80 |
 | Swagger UI | http://localhost:8081 | swagger-ui:8080 |
 | Prometheus | http://localhost:9090 | prometheus:9090 |
 | Jaeger UI | http://localhost:16686 | jaeger:16686 |
