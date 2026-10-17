@@ -1,4 +1,5 @@
-# Booking Service with On-Chain Proofs
+# High-load Booking Service with On-Chain Proofs 
+### v.0.2
 
 Debook is a high-throughput booking service for discovering and reserving time slots. 
 Built with Go, it uses PostgreSQL, Redis, Kafka, and an asynchronous outbox workflow to process bookings and record proof of ownership on the Autheo blockchain. 
