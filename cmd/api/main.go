@@ -100,6 +100,10 @@ func main() {
 			booking.HTTPError(w, 500, err)
 			return
 		}
+		// Keep the collection contract stable for clients when no slots match.
+		if slots == nil {
+			slots = make([]map[string]any, 0)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(slots)
 	})
@@ -187,8 +191,10 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(map[string]string{"status": "CANCELLED"})
 	})
-	limit := 120
-	if value, err := strconv.Atoi(getenv("RATE_LIMIT_PER_MINUTE", "120")); err == nil && value > 0 {
+	// The load-test UI supports up to 1,000 sessions per second. Keep the
+	// default local API limit aligned with that capacity (1,000 requests/sec).
+	limit := 60000
+	if value, err := strconv.Atoi(getenv("RATE_LIMIT_PER_MINUTE", "60000")); err == nil && value > 0 {
 		limit = value
 	}
 	server := &http.Server{Addr: ":" + getenv("PORT", "8080"), Handler: cors(security(rateLimit(limit, requestLog(logger, metrics, mux)))), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
