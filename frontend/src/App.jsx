@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, ArrowDown, ArrowUpRight, Ban, Check, ChevronDown, CircleHelp, Clock3, Code2, ExternalLink, Gauge, Globe2, Layers3, Play, RotateCcw, Settings2, ShieldCheck, Square, Zap } from 'lucide-react'
+import About from './About.jsx'
+import { DEMO_API, demoFetch } from './demoApi.js'
 
 const isRussian = window.location.pathname === '/ru' || window.location.pathname.startsWith('/ru/')
 const text = (ru, en) => isRussian ? ru : en
+const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+// Hosted builds (Vercel) have no backend, so they default to the in-browser demo API.
+const defaultApiUrl = import.meta.env.VITE_API_URL || (isLocalHost ? 'http://127.0.0.1:8080' : DEMO_API)
+const docsUrl = isLocalHost ? 'http://localhost:8081' : 'https://github.com/ThothDivision/debook/blob/main/docs/openapi.yaml'
+const apiFetch = (apiUrl, path, options) => apiUrl.trim() === DEMO_API ? demoFetch(path, options) : fetch(`${apiUrl.replace(/\/$/, '')}${path}`, options)
 const english = {
   'Запуск готов к работе':'Run is ready','Настройте сценарий и нажмите «Запустить тест»':'Configure the scenario and click “Run test”',
   'Инструменты':'Tools','Локальное окружение':'Local environment','Нагрузочное тестирование':'Load testing','Проверка сценария бронирования в реальном времени':'Real-time booking scenario validation','Конфигурация сценария':'Scenario configuration','Задайте параметры тестового прогона':'Set the parameters for your test run','Интенсивность':'Rate','СЕАНСОВ В СЕКУНДУ':'SESSIONS PER SECOND','запросов / сек':'requests / sec','Щадящий прогон':'Light run','Средняя нагрузка':'Medium load','Интенсивный прогон':'Intensive run','Высокая нагрузка':'High load','Длительность теста':'Test duration','МИНУТЫ : СЕКУНДЫ':'MINUTES : SECONDS','Всего до':'Up to','сеансов':'sessions','СЦЕНАРИЙ':'SCENARIO','АВТОМАТИЧЕСКИ':'AUTOMATED','Получить слоты':'Fetch slots','Забронировать слот':'Book a slot','Отменить бронь':'Cancel booking','Параметры API':'API parameters','Изменить':'Edit','Скрыть':'Hide','Запустить тест':'Run test','Остановить тест':'Stop test','Безопасно для локальной среды':'Safe for local environment','Результаты прогона':'Run results','Текущий тестовый запуск':'Current test run','В ПРОЦЕССЕ':'RUNNING','ОЖИДАНИЕ':'IDLE','ЗАПУЩЕНО СЕАНСОВ':'SESSIONS STARTED','СЛОТОВ ПОЛУЧЕНО':'SLOTS FETCHED','СОЗДАНО БРОНЕЙ':'BOOKINGS CREATED','ОТМЕНЕНО БРОНЕЙ':'BOOKINGS CANCELLED','Прогресс теста':'Test progress','Успешно:':'Successful:','Ошибки:':'Errors:','Средняя скорость:':'Average rate:','Активность запросов':'Request activity','Хронология операций теста':'Test operation timeline','Очистить':'Clear','событий':'events','События обновляются в реальном времени':'Events update in real time','Тестируйте ответственно':'Test responsibly','OpenAPI документация':'OpenAPI documentation','Нагрузочный тест запущен':'Load test started','Тест завершён по времени':'Test completed on schedule','Тест остановлен':'Test stopped','Подключение к API':'API connection','Получено свободных слотов':'Available slots fetched','Бронь создана':'Booking created','Бронирование отменено':'Booking cancelled','Ошибка отмены':'Cancellation error','слоты не найдены':'no slots found','Не удалось подключиться к API':'Could not connect to API'
@@ -10,14 +17,14 @@ const english = {
 
 const initialEvents = [
   { time: '14:32:08.421', method: 'GET', title: 'Запуск готов к работе', detail: 'Настройте сценарий и нажмите «Запустить тест»', status: 'ready' },
-  { time: '14:32:08.419', method: 'SYS', title: 'Подключение к API', detail: 'http://127.0.0.1:8080', status: 'ok' },
+  { time: '14:32:08.419', method: 'SYS', title: 'Подключение к API', detail: defaultApiUrl, status: 'ok' },
 ]
 
 function App() {
   const [rate, setRate] = useState(10)
   const [rateInput, setRateInput] = useState('10')
   const [duration, setDuration] = useState(60)
-  const [apiUrl, setApiUrl] = useState('http://127.0.0.1:8080')
+  const [apiUrl, setApiUrl] = useState(defaultApiUrl)
   const [region, setRegion] = useState('eu-1')
   const [resource, setResource] = useState('room-1')
   const [customerRef, setCustomerRef] = useState('load-test-client')
@@ -79,7 +86,7 @@ function App() {
     setRate(next)
   }
   const request = async (path, options = {}, controller) => {
-    const response = await fetch(`${apiUrl.replace(/\/$/, '')}${path}`, { ...options, signal: controller?.signal, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } })
+    const response = await apiFetch(apiUrl, path, { ...options, signal: controller?.signal, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
     return body
@@ -154,7 +161,7 @@ function App() {
     }
     setNotice('')
     try {
-      const response = await fetch(`${apiUrl.replace(/\/$/, '')}/healthz`)
+      const response = await apiFetch(apiUrl, '/healthz')
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
     } catch (error) {
       setNotice(`API недоступен: ${error.message}`)
@@ -215,12 +222,13 @@ function App() {
       <button className="rail-icon active" aria-label="Нагрузочное тестирование"><Gauge size={19} /></button>
       <button className="rail-icon" aria-label="Запросы"><Code2 size={19} /></button>
       <button className="rail-icon" aria-label="Активность"><Activity size={19} /></button>
-      <div className="rail-bottom"><button className="rail-icon" aria-label="Справка"><CircleHelp size={19} /></button><div className="avatar">D</div></div>
+      <div className="rail-bottom"><button className="rail-icon" aria-label="Справка" onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}><CircleHelp size={19} /></button><div className="avatar">D</div></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><div className="breadcrumbs"><span>Инструменты</span><span className="slash">/</span><strong>Load Lab</strong></div><div className="top-right"><div className="environment"><span className="pulse-dot" />Локальное окружение</div><div className="top-avatar">DL</div></div></header>
+      <header className="topbar"><div className="breadcrumbs"><span>Инструменты</span><span className="slash">/</span><strong>Load Lab</strong></div><div className="top-right"><div className="environment"><span className="pulse-dot" />{isLocalHost ? 'Локальное окружение' : text('Хостинг · демо', 'Hosted demo')}</div><div className="top-avatar">DL</div></div></header>
       <div className="content-wrap">
-        <section className="intro"><div><div className="eyebrow"><Zap size={13} fill="currentColor" /> PERFORMANCE TOOLKIT</div><h1>Нагрузочное тестирование</h1><p className="subtitle">Проверка сценария бронирования в реальном времени</p></div><div className="api-pill"><Globe2 size={15} /><span>API endpoint</span><code>{apiUrl.replace(/^https?:\/\//, '')}</code><span className="online-dot" /></div></section>
+        <About demo={apiUrl.trim() === DEMO_API} />
+        <section className="intro" id="lab"><div><div className="eyebrow"><Zap size={13} fill="currentColor" /> PERFORMANCE TOOLKIT</div><h1>Нагрузочное тестирование</h1><p className="subtitle">Проверка сценария бронирования в реальном времени</p></div><div className="api-pill"><Globe2 size={15} /><span>API endpoint</span><code>{apiUrl.replace(/^https?:\/\//, '')}</code><span className="online-dot" /></div></section>
         <section className="dashboard-grid">
           <div className="left-column">
             <section className="panel config-panel">
@@ -233,7 +241,7 @@ function App() {
               <div className="duration-row"><div className="duration-select"><Clock3 size={16} /><select value={duration} disabled={running} onChange={e => setDuration(Number(e.target.value))}>{Array.from({ length: 60 }, (_, index) => { const seconds = (index + 1) * 10; const minutes = String(Math.floor(seconds / 60)).padStart(2, '0'); const remainder = String(seconds % 60).padStart(2, '0'); return <option key={seconds} value={seconds}>{minutes} : {remainder}</option> })}</select><ChevronDown size={15} /></div><span className="duration-hint">{text('Всего до', 'Up to')} <b>{(rate * duration).toLocaleString('ru-RU')}</b> {text('сеансов', 'sessions')}</span></div>
               <div className="scenario-box"><div className="scenario-top"><span className="scenario-tag">СЦЕНАРИЙ</span><span className="auto-tag"><span />АВТОМАТИЧЕСКИ</span></div><div className="flow"><div className="flow-step"><div className="flow-icon blue"><ArrowDown size={15} /></div><div><b>Получить слоты</b><small>GET /api/v1/slots</small></div></div><div className="flow-connector" /><div className="flow-step"><div className="flow-icon purple"><ArrowUpRight size={15} /></div><div><b>Забронировать слот</b><small>POST /api/v1/bookings</small></div></div><div className="flow-connector" /><div className="flow-step"><div className="flow-icon amber"><RotateCcw size={15} /></div><div><b>Отменить бронь</b><small>{text('1 из каждых 10 броней', '1 of every 10 bookings')}</small></div></div></div></div>
               <button className="advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}><Settings2 size={15} />Параметры API<span>{showAdvanced ? 'Скрыть' : 'Изменить'}</span><ChevronDown size={14} className={showAdvanced ? 'rotate' : ''} /></button>
-              {showAdvanced && <div className="advanced-fields"><label>API URL<input value={apiUrl} disabled={running} onChange={e => setApiUrl(e.target.value)} placeholder="http://127.0.0.1:8080" /></label><div className="advanced-two"><label>Регион<input value={region} disabled={running} onChange={e => setRegion(e.target.value)} /></label><label>Ресурс<input value={resource} disabled={running} onChange={e => setResource(e.target.value)} /></label></div><label>Customer ref<input value={customerRef} disabled={running} onChange={e => setCustomerRef(e.target.value)} /></label><label>EVM-кошелёк<input value={wallet} disabled={running} onChange={e => setWallet(e.target.value)} /></label><p>Все настройки сохраняются только в этом браузере и не передаются серверу.</p></div>}
+              {showAdvanced && <div className="advanced-fields"><label>API URL<input value={apiUrl} disabled={running} onChange={e => setApiUrl(e.target.value)} placeholder="http://127.0.0.1:8080 or demo" /></label><div className="advanced-two"><label>Регион<input value={region} disabled={running} onChange={e => setRegion(e.target.value)} /></label><label>Ресурс<input value={resource} disabled={running} onChange={e => setResource(e.target.value)} /></label></div><label>Customer ref<input value={customerRef} disabled={running} onChange={e => setCustomerRef(e.target.value)} /></label><label>EVM-кошелёк<input value={wallet} disabled={running} onChange={e => setWallet(e.target.value)} /></label><p>Все настройки сохраняются только в этом браузере и не передаются серверу.</p><p>{text('Введите demo, чтобы использовать встроенный симулятор API.', 'Enter demo to use the built-in in-browser API simulator.')}</p></div>}
               {notice && <div className="notice"><ShieldCheck size={16} />{notice}</div>}
               <div className="action-row">{running ? <button className="stop-button" onClick={() => stop()}><Square size={15} fill="currentColor" />Остановить тест</button> : <button className="run-button" onClick={start}><Play size={16} fill="currentColor" />Запустить тест<ArrowUpRight size={16} /></button>}<span className="action-secure"><ShieldCheck size={14} />Безопасно для локальной среды</span></div>
             </section>
@@ -241,7 +249,7 @@ function App() {
           </div>
           <section className="panel activity-panel"><div className="activity-heading"><div><h2>Активность запросов</h2><p>Хронология операций теста</p></div><button className="activity-filter" onClick={() => setEvents(initialEvents)}><RotateCcw size={13} />Очистить</button></div><div className="activity-summary"><span><span className="summary-indicator live" />LIVE LOG</span><span className="summary-count">{events.filter(e => e.status !== 'ready').length} {text('событий', 'events')}</span></div><div className="event-list" ref={eventsRef}>{events.map((event, i) => <div className={`event ${event.status}`} key={`${event.time}-${i}`}><div className="event-rail"><span className="event-dot">{event.status === 'ok' ? <Check size={11} /> : event.status === 'error' ? <Ban size={11} /> : <Zap size={11} />}</span>{i < events.length - 1 && <span className="event-line" />}</div><div className="event-body"><div className="event-meta"><span className={`method ${event.method.toLowerCase()}`}>{event.method}</span><time>{event.time}</time></div><b>{event.title}</b><p>{event.detail}</p></div></div>)}</div><div className="activity-footer"><div className="connection-state"><span className="online-dot" />События обновляются в реальном времени</div><button className="external-link" title="OpenAPI спецификация"><ExternalLink size={15} /></button></div></section>
         </section>
-        <footer className="page-footer"><span>DEBOOK <span className="footer-dot-small">·</span> LOAD LAB <span className="version">v1.0.0</span></span><span>Тестируйте ответственно <span className="footer-dot-small">·</span> <a href="http://localhost:8081" target="_blank" rel="noreferrer">OpenAPI документация <ExternalLink size={11} /></a></span></footer>
+        <footer className="page-footer"><span>DEBOOK <span className="footer-dot-small">·</span> LOAD LAB <span className="version">v1.0.0</span></span><span>Тестируйте ответственно <span className="footer-dot-small">·</span> <a href={docsUrl} target="_blank" rel="noreferrer">OpenAPI документация <ExternalLink size={11} /></a></span></footer>
       </div>
     </main>
   </div>

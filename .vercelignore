@@ -1,0 +1,12 @@
+# Only the static frontend is deployed; keep the Go services, Docker and contracts out of the upload.
+cmd/
+internal/
+migrations/
+blockchain-deployer/
+deploy/
+Dockerfile
+compose.yaml
+go.mod
+go.sum
+frontend/node_modules/
+frontend/dist/
